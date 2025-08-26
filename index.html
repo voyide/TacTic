@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Shiftstorm Colors</title>
+<style>
+  :root{
+    --framePad: 22px;
+    --rim: 16px;
+    --corner: 44px;
+    --hudHeight: 54px;
+    --bubble: 86px;
+    --panelRad: 36px;
+
+    --p1: #3AC4A0; /* player 1 */
+    --p2: #E35764; /* player 2 / bot */
+    --empty: #e9ebf3;
+    --grid: #cfd3e3;
+    --turnColor: #ffffff; /* diamond fill */
+  }
+
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{ height:100%; margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial; }
+  body{ background: #2e2d2f; color: #111; user-select:none; }
+  .app{ position:relative; height:100%; width:100%;
+    background: radial-gradient(1800px 900px at 50% -400px, #d0c9ee 30%, #b6afd7 60%, #a59dcb 100%) no-repeat; overflow:hidden; }
+
+  .panel{
+    position:absolute; left: var(--framePad); right: var(--framePad);
+    top: var(--framePad); bottom: 200px;
+    border-radius: var(--corner); background:#fff;
+    box-shadow: inset 0 0 0 var(--rim) #0b0b0b, 0 18px 30px rgba(0,0,0,.4);
+    overflow:hidden;
+  }
+  .panel::after{ content:""; position:absolute; inset: calc(var(--rim) - 2px);
+    border-radius: calc(var(--corner) - var(--rim) + 2px);
+    box-shadow: inset 0 0 22px rgba(20,30,70,.25); pointer-events:none; }
+
+  .hud-tray{
+    position:absolute; left: calc(var(--rim) + 10px); right: calc(var(--rim) + 10px); top: calc(var(--rim) + 8px);
+    height: var(--hudHeight); border-radius: 16px;
+    background: linear-gradient(#f7f7f7, #d7d7d7);
+    box-shadow: inset 0 4px 10px rgba(0,0,0,.25), 0 2px 2px rgba(0,0,0,.08);
+    display:flex; align-items:center; justify-content:space-between; padding:0 18px;
+    font-weight:700; letter-spacing:.5px; color:#222; font-style: italic;
+  }
+
+  .timer{
+    position:absolute; top: calc(var(--rim) - 20px); left:50%; transform: translateX(-50%);
+    width: var(--bubble); height: var(--bubble);
+    border-radius: 999px; background:#fff; border:10px solid #0b0b0b;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:900; font-size:34px; box-shadow: 0 8px 16px rgba(0,0,0,.35); z-index:2;
+  }
+  .score{ position:absolute; top: calc(var(--rim) + var(--hudHeight) + 18px);
+    width:100%; text-align:center; font-weight:800; font-size:22px; color:#222; }
+
+  .board-wrap{
+    position:absolute; left: calc(var(--rim) + 14px); right: calc(var(--rim) + 14px);
+    top: calc(var(--rim) + var(--hudHeight) + 56px); bottom: calc(var(--rim) + 16px);
+    border-radius: var(--panelRad); background:#fff;
+    box-shadow: inset 0 0 28px rgba(0,0,0,.18), 0 1px 0 rgba(255,255,255,.4);
+    display:flex; align-items:center; justify-content:center; overflow:hidden;
+  }
+
+  .board{
+    --size: 5; position:relative; display:grid;
+    grid-template-columns: repeat(var(--size), 1fr);
+    grid-auto-rows: 1fr; gap:6px; touch-action:none;
+  }
+  .cell{ background: var(--empty); border-radius:0; box-shadow: inset 0 0 0 2px #d8dced; cursor:pointer; }
+  .cell.taken{ cursor: default; }
+  .cell.P1{ background:#b9efe3; box-shadow: inset 0 0 0 2px #2d917b; }
+  .cell.P2{ background:#f3b6bf; box-shadow: inset 0 0 0 2px #b13a46; }
+  .cell.win{ outline: 3px solid #ffda6d; outline-offset:-3px; }
+
+  /* 2048-like animation layer */
+  .anim-layer{ position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+  .tile{ position:absolute; border-radius:0; box-shadow: inset 0 0 0 2px #d8dced; will-change: transform; background:var(--empty); }
+  .tile.P1{ background:#b9efe3; box-shadow: inset 0 0 0 2px #2d917b; }
+  .tile.P2{ background:#f3b6bf; box-shadow: inset 0 0 0 2px #b13a46; }
+  .track{ position:absolute; background: rgba(80,90,140,.08); border-radius:6px; pointer-events:none; }
+
+  /* Diamond (turn color = fill) */
+  .brand{ position:absolute; left:0; right:0; bottom: 66px; display:flex; justify-content:center; align-items:center; }
+  .mark{ position:relative; width:110px; height:110px; transform: rotate(45deg);
+    filter: drop-shadow(0 12px 10px rgba(0,0,0,.25)); cursor:pointer; }
+  .mark::before{ content:""; position:absolute; inset:0; background:#0b0b0b; border-radius:10px; }
+  .mark::after{ content:""; position:absolute; inset:12px; background: var(--turnColor); border-radius:8px; box-shadow: inset 0 0 0 10px #0b0b0b; }
+  .mark > i{ position:absolute; inset:30px; background:#0b0b0b; border-radius:6px; transform: rotate(-45deg); }
+  .mark.paused{ filter: saturate(.4); }
+
+  .overlay{
+    position:absolute; inset: calc(var(--rim) + 14px) calc(var(--rim) + 14px) calc(var(--rim) + 14px) calc(var(--rim) + 14px);
+    border-radius: var(--panelRad); background: rgba(255,255,255,.94);
+    display:none; align-items:center; justify-content:center; text-align:center; padding:24px; z-index:5;
+  }
+  .overlay.show{ display:flex; }
+  .overlay h2{ margin:0 0 12px 0; font-size: 28px; }
+  .overlay p{ margin:6px 0 14px 0; color:#333; }
+  .btns{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+  .btn{
+    display:inline-block; padding:10px 16px; border-radius:12px; font-weight:800; cursor:pointer;
+    background:#0b0b0b; color:#fff; border:2px solid #0b0b0b; user-select:none;
+  }
+  .btn.outline{ background:#fff; color:#0b0b0b; }
+  .muted{ color:#666; font-weight:600; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="panel">
+    <div class="hud-tray">
+      <div>ROUND <span id="round">1</span></div>
+      <div>BEST <span id="best">0</span></div>
+    </div>
+    <div class="timer" id="timer">60</div>
+    <div class="score"><span id="score">0</span></div>
+
+    <div class="board-wrap">
+      <div class="board" id="board" aria-label="Shiftstorm board"></div>
+      <div class="anim-layer" id="anim"></div>
+    </div>
+
+    <div class="overlay show" id="overlay" aria-live="polite">
+      <div>
+        <h2 id="ov-title">Shiftstorm Colors</h2>
+        <p id="ov-msg" class="muted">Tap a cell to place. Drag while placing to shift the whole row/column (wrap-around). Connect 4 to win.</p>
+        <div class="btns" id="modeBtns">
+          <div class="btn" data-mode="bot">Play vs Computer</div>
+          <div class="btn outline" data-mode="2p">2 Players (Local)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="brand">
+    <div class="mark" id="diamond" role="button" aria-label="Pause/Resume/Turn"><i></i></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // Constants
+  const SIZE=5, CONNECT=4, START_TIME=60, TIME_REWARD=8, ROUND_REWARD=150;
+
+  // Elements
+  const els = {
+    board: document.getElementById('board'),
+    anim: document.getElementById('anim'),
+    round: document.getElementById('round'),
+    best: document.getElementById('best'),
+    score: document.getElementById('score'),
+    timer: document.getElementById('timer'),
+    overlay: document.getElementById('overlay'),
+    ovTitle: document.getElementById('ov-title'),
+    ovMsg: document.getElementById('ov-msg'),
+    modeBtns: document.getElementById('modeBtns'),
+    diamond: document.getElementById('diamond'),
+    wrap: document.querySelector('.board-wrap')
+  };
+
+  // State
+  const storeKey='shiftstorm_colors_best_v7';
+  let best=parseInt(localStorage.getItem(storeKey)||'0',10); 
+  els.best.textContent=best;
+  let board=makeBoard(SIZE);
+  let state='idle'; 
+  let turn=1;       
+  let timer=START_TIME, tickHandle=null, score=0, round=1;
+  let mode='bot';   
+  let timerEnabled=true;
+
+  // Precompute segments
+  const segments = precomputeSegments(SIZE, CONNECT);
+
+  // Build UI
+  buildGrid();
+  fitBoardSquare(); 
+  window.addEventListener('resize', fitBoardSquare);
+
+  // Mode selection
+  els.modeBtns.addEventListener('click', e=>{
+    const btn = e.target.closest('.btn'); 
+    if(!btn) return;
+    mode = btn.dataset.mode; 
+    startRun();
+  });
+
+  // Diamond pause/resume
+  els.diamond.addEventListener('click', ()=>{
+    if(state==='idle' || state==='over'){ 
+      showOverlay('Shiftstorm Colors','Choose a mode to begin.'); 
+      return; 
+    }
+    if(state==='paused'){ 
+      resume(); 
+      return; 
+    }
+    if(state==='playing' || state==='botThink'){ 
+      pause(); 
+      return; 
+    }
+  });
+
+  function pause(){
+    if(tickHandle){ 
+      clearInterval(tickHandle); 
+      tickHandle=null; 
+    }
+    state='paused'; 
+    els.diamond.classList.add('paused'); 
+    updateTurnIndicator();
+    showOverlay('Paused','Tap the diamond to resume or pick a mode:', true);
+  }
+
+  function resume(){
+    els.diamond.classList.remove('paused');
+    hideOverlay();
+    if(timerEnabled) tickHandle=setInterval(tick,1000);
+    state='playing'; 
+    updateTurnIndicator();
+    if(mode==='bot' && turn===2) botMove();
+  }
+
+  function startRun(){
+    score=0; 
+    round=1;
+    timerEnabled = (mode==='bot');
+    timer = timerEnabled? START_TIME : Infinity;
+    els.timer.textContent = timerEnabled? String(timer) : '∞';
+    els.round.textContent = round; 
+    els.score.textContent = score;
+    hideOverlay(); 
+    els.diamond.classList.remove('paused');
+    newRound();
+    if(timerEnabled){ 
+      if(tickHandle) clearInterval(tickHandle); 
+      tickHandle=setInterval(tick,1000); 
+    }
+    else if(tickHandle){ 
+      clearInterval(tickHandle); 
+      tickHandle=null; 
+    }
+    state='playing'; 
+    updateTurnIndicator();
+  }
+
+  function endRun(message){
+    state='over'; 
+    if(tickHandle){ 
+      clearInterval(tickHandle); 
+      tickHandle=null; 
+    }
+    if(score>best){ 
+      best=score; 
+      localStorage.setItem(storeKey,String(best)); 
+      els.best.textContent=best; 
+    }
+    showOverlay('Game Over', message+' Final Score: '+score+'\nTap a mode to play again.');
+  }
+
+  function newRound(){
+    board=makeBoard(SIZE); 
+    turn=1; 
+    renderBoard(); 
+    updateTurnIndicator();
+  }
+
+  function tick(){
+    if(!timerEnabled || (state!=='playing' && state!=='botThink')) return;
+    timer=Math.max(0,timer-1); 
+    els.timer.textContent=String(timer);
+    if(timer===0) endRun('Time ran out!');
+  }
+
+  // Board UI
+  function buildGrid(){
+    els.board.style.setProperty('--size', SIZE);
+    els.board.innerHTML='';
+    for(let r=0;r<SIZE;r++){
+      for(let c=0;c<SIZE;c++){
+        const d=document.createElement('div');
+        d.className='cell'; 
+        d.dataset.r=r; 
+        d.dataset.c=c;
+        let start=null;
+        d.addEventListener('pointerdown', ev=>{
+          if(state!=='playing' || turn!==1) return;
+          const rr=+d.dataset.r, cc=+d.dataset.c;
+          if(board[rr][cc]!==0) return;
+          d.setPointerCapture && d.setPointerCapture(ev.pointerId);
+          start={x:ev.clientX,y:ev.clientY,r:rr,c:cc};
+        });
+        d.addEventListener('pointerup', ev=>{
+          if(state!=='playing' || turn!==1) return;
+          if(!start) return;
+          const dx=ev.clientX-start.x, dy=ev.clientY-start.y;
+          const th=22, sh=(Math.abs(dx)>th||Math.abs(dy)>th)? inferShift(dx,dy):null;
+          handleMove(start.r,start.c,sh);
+          start=null;
+        });
+        d.addEventListener('pointercancel', ()=> start=null);
+        els.board.appendChild(d);
+      }
+    }
+    renderBoard();
+  }
+
+  function fitBoardSquare(){
+    const wrapRect=els.wrap.getBoundingClientRect();
+    const size=Math.floor(Math.min(wrapRect.width-20, wrapRect.height-20));
+    els.board.style.width=size+'px'; 
+    els.board.style.height=size+'px';
+    els.anim.style.width=size+'px'; 
+    els.anim.style.height=size+'px';
+  }
+
+  function renderBoard(winLine){
+    const cells=els.board.children; 
+    let idx=0;
+    for(let r=0;r<SIZE;r++){
+      for(let c=0;c<SIZE;c++){
+        const v=board[r][c]; 
+        const el=cells[idx++];
+        el.className='cell'+(v?(' taken '+(v===1?'P1':'P2')):'');
+        el.classList.remove('win');
+      }
+    }
+    if(winLine){ 
+      for(const [r,c] of winLine){ 
+        els.board.children[r*SIZE+c].classList.add('win'); 
+      } 
+    }
+  }
+
+  function updateTurnIndicator(){
+    let color = '#ffffff';
+    if(state==='paused' || state==='idle' || state==='over') color = '#ffffff';
+    else color = (turn===1? getComputedStyle(document.documentElement).getPropertyValue('--p1').trim()
+                           : getComputedStyle(document.documentElement).getPropertyValue('--p2').trim());
+    els.diamond.style.setProperty('--turnColor', color);
+  }
+
+  // Moves
+  function handleMove(r,c,shift){
+    if(board[r][c]!==0) return;
+    board[r][c]=turn; 
+    renderBoard();
+    const afterAnim = ()=>{
+      const win=checkWin(board,turn); 
+      renderBoard(win?win.line:null);
+      if(win){
+        if(mode==='bot' && turn===1){
+          score += ROUND_REWARD + Math.floor((timerEnabled?timer:0)*5);
+          if(timerEnabled){ 
+            timer=Math.min(99,timer+TIME_REWARD); 
+            els.timer.textContent=String(timer); 
+          }
+          els.score.textContent=String(score);
+        }
+        round+=1; 
+        els.round.textContent=String(round);
+        setTimeout(()=>{ newRound(); }, 600);
+        return;
+      }
+      turn = (turn===1?2:1); 
+      updateTurnIndicator();
+      if(mode==='bot' && turn===2){ 
+        state='botThink'; 
+        botMove(); 
+      }
+    };
+    if(shift){
+      animateShift2048(shift.type, shift.type==='row'?r:c, shift.dir, ()=>{
+        if(shift.type==='row') shiftRowIn(board,r,shift.dir); 
+        else shiftColIn(board,c,shift.dir);
+        renderBoard(); 
+        afterAnim();
+      });
+    } else afterAnim();
+  }
+
+  function inferShift(dx,dy){
+    if(Math.abs(dx)>=Math.abs(dy)) return {type:'row', dir: dx>0?1:-1};
+    return {type:'col', dir: dy>0?1:-1};
+  }
+
+  // 2048-style animation
+  function animateShift2048(kind, index, dir, done){
+    const dur=230, easing='cubic-bezier(.15,.9,.1,1)';
+    const boardRect=els.board.getBoundingClientRect();
+    const firstRect=els.board.children[0].getBoundingClientRect();
+    const cw=firstRect.width, ch=firstRect.height;
+
+    const track=document.createElement('div'); 
+    track.className='track';
+    if(kind==='row'){
+      track.style.left='0px'; 
+      track.style.width=boardRect.width+'px'; 
+      track.style.height=(ch+6)+'px';
+      const top=els.board.children[index*SIZE].getBoundingClientRect().top - boardRect.top - 3;
+      track.style.top=top+'px';
+    } else {
+      track.style.top='0px'; 
+      track.style.height=boardRect.height+'px'; 
+      track.style.width=(cw+6)+'px';
+      const left=els.board.children[index].getBoundingClientRect().left - boardRect.left - 3;
+      track.style.left=left+'px';
+    }
+    els.anim.appendChild(track);
+
+    const toHide=[], tiles=[];
+    if(kind==='row'){
+      for(let c=0;c<SIZE;c++){
+        const real=cellAt(index,c), rect=real.getBoundingClientRect();
+        const t=makeTile(real, rect, boardRect); 
+        toHide.push(real);
+        const dx=(c===SIZE-1 && dir>0)? -(SIZE-1)*cw : (c===0 && dir<0)? (SIZE-1)*cw : dir*cw;
+        tiles.push({el:t, tx:dx, ty:0});
+      }
+    } else {
+      for(let r=0;r<SIZE;r++){
+        const real=cellAt(r,index), rect=real.getBoundingClientRect();
+        const t=makeTile(real, rect, boardRect); 
+        toHide.push(real);
+        const dy=(r===SIZE-1 && dir>0)? -(SIZE-1)*ch : (r===0 && dir<0)? (SIZE-1)*ch : dir*ch;
+        tiles.push({el:t, tx:0, ty:dy});
+      }
+    }
+    toHide.forEach(el=> el.style.visibility='hidden');
+
+    requestAnimationFrame(()=>{
+      tiles.forEach(t=>{
+        t.el.style.transition='transform '+dur+'ms '+easing;
+        t.el.style.transform='translate('+t.tx+'px,'+t.ty+'px)';
+      });
+      track.style.transition='opacity '+dur+'ms '+easing; 
+      track.style.opacity='0.6';
+    });
+
+    setTimeout(()=>{
+      toHide.forEach(el=> el.style.visibility='');
+      els.anim.innerHTML='';
+      done && done();
+    }, dur+30);
+
+    function makeTile(real, rect, bRect){
+      const g=document.createElement('div');
+      const cls = real.classList.contains('P1')?'P1': real.classList.contains('P2')?'P2':'';
+      g.className='tile '+cls;
+      g.style.left=(rect.left - bRect.left)+'px';
+      g.style.top=(rect.top - bRect.top)+'px';
+      g.style.width=rect.width+'px'; 
+      g.style.height=rect.height+'px';
+      els.anim.appendChild(g); 
+      return g;
+    }
+  }
+  
+  function cellAt(r,c){ 
+    return els.board.children[r*SIZE+c]; 
+  }
+
+  // ================= BOT =================
+  function botMove(){
+    setTimeout(()=>{
+      // Simple but effective bot strategy
+      let move = findImmediateWin(board, 2);
+      if(!move) move = findImmediateWin(board, 1); // Block player
+      if(!move) move = findBestMove(board);
+      if(!move){
+        const empties=listEmpties(board); 
+        if(empties.length > 0){
+          const p=empties[Math.floor(Math.random()*empties.length)];
+          move={r:p[0],c:p[1],sh:null};
+        }
+      }
+      
+      if(move){
+        board[move.r][move.c]=2; 
+        renderBoard();
+        const finish = ()=>{
+          const win=checkWin(board,2); 
+          renderBoard(win?win.line:null);
+          if(win){ 
+            endRun('The computer connected four.'); 
+            return; 
+          }
+          turn=1; 
+          state='playing'; 
+          updateTurnIndicator();
+        };
+        if(move.sh){
+          animateShift2048(move.sh.type, move.sh.type==='row'?move.r:move.c, move.sh.dir, ()=>{
+            if(move.sh.type==='row') shiftRowIn(board, move.r, move.sh.dir); 
+            else shiftColIn(board, move.c, move.sh.dir);
+            renderBoard(); 
+            finish();
+          });
+        } else finish();
+      }
+    }, 400);
+  }
+
+  function findImmediateWin(b, player){
+    const empties = listEmpties(b);
+    for(const [r,c] of empties){
+      // Try no shift
+      const b1 = clone(b);
+      b1[r][c] = player;
+      if(checkWin(b1, player)) return {r,c,sh:null};
+      
+      // Try with shifts
+      const shifts = [
+        {type:'row',dir:1}, {type:'row',dir:-1},
+        {type:'col',dir:1}, {type:'col',dir:-1}
+      ];
+      for(const sh of shifts){
+        const b2 = clone(b1);
+        if(sh.type === 'row') shiftRowIn(b2, r, sh.dir);
+        else shiftColIn(b2, c, sh.dir);
+        if(checkWin(b2, player)) return {r,c,sh};
+      }
+    }
+    return null;
+  }
+
+  function findBestMove(b){
+    const moves = [];
+    const empties = listEmpties(b);
+    
+    for(const [r,c] of empties){
+      // Score position without shift
+      const b1 = clone(b);
+      b1[r][c] = 2;
+      const baseScore = evaluatePosition(b1, 2) - evaluatePosition(b1, 1);
+      moves.push({r,c,sh:null,score:baseScore});
+      
+      // Try shifts
+      const shifts = [
+        {type:'row',dir:1}, {type:'row',dir:-1},
+        {type:'col',dir:1}, {type:'col',dir:-1}
+      ];
+      for(const sh of shifts){
+        const b2 = clone(b1);
+        if(sh.type === 'row') shiftRowIn(b2, r, sh.dir);
+        else shiftColIn(b2, c, sh.dir);
+        const shiftScore = evaluatePosition(b2, 2) - evaluatePosition(b2, 1);
+        if(shiftScore > baseScore + 20){
+          moves.push({r,c,sh,score:shiftScore});
+        }
+      }
+    }
+    
+    // Sort by score and take best
+    moves.sort((a,b) => b.score - a.score);
+    return moves[0] || null;
+  }
+
+  function evaluatePosition(b, player){
+    let score = 0;
+    
+    // Check all segments
+    for(const seg of segments){
+      let mine = 0, theirs = 0, empty = 0;
+      for(const [r,c] of seg){
+        if(b[r][c] === player) mine++;
+        else if(b[r][c] === 3-player) theirs++;
+        else empty++;
+      }
+      
+      // Can't win if opponent has pieces in this segment
+      if(theirs === 0){
+        if(mine === 3) score += 100;
+        else if(mine === 2) score += 10;
+        else if(mine === 1) score += 1;
+      }
+    }
+    
+    // Center control bonus
+    if(b[2][2] === player) score += 3;
+    
+    return score;
+  }
+
+  // Utility functions
+  function makeBoard(n){ 
+    return Array.from({length:n},()=>Array(n).fill(0)); 
+  }
+  
+  function clone(b){ 
+    return b.map(row=>row.slice()); 
+  }
+  
+  function listEmpties(b){ 
+    const a=[]; 
+    for(let r=0;r<b.length;r++) 
+      for(let c=0;c<b[r].length;c++) 
+        if(b[r][c]===0) a.push([r,c]); 
+    return a; 
+  }
+  
+  function shiftRowIn(b, rowIdx, dir){
+    const row=b[rowIdx];
+    if(dir>0){ 
+      const last=row[row.length-1]; 
+      for(let i=row.length-1;i>0;i--) row[i]=row[i-1]; 
+      row[0]=last; 
+    }
+    else { 
+      const first=row[0]; 
+      for(let i=0;i<row.length-1;i++) row[i]=row[i+1]; 
+      row[row.length-1]=first; 
+    }
+  }
+  
+  function shiftColIn(b, colIdx, dir){
+    const n=b.length;
+    if(dir>0){ 
+      const last=b[n-1][colIdx]; 
+      for(let r=n-1;r>0;r--) b[r][colIdx]=b[r-1][colIdx]; 
+      b[0][colIdx]=last; 
+    }
+    else { 
+      const first=b[0][colIdx]; 
+      for(let r=0;r<n-1;r++) b[r][colIdx]=b[r+1][colIdx]; 
+      b[n-1][colIdx]=first; 
+    }
+  }
+  
+  function precomputeSegments(n, k){
+    const segs=[];
+    // Rows
+    for(let r=0;r<n;r++) 
+      for(let c=0;c<=n-k;c++){ 
+        const line=[]; 
+        for(let i=0;i<k;i++) line.push([r,c+i]); 
+        segs.push(line); 
+      }
+    // Columns
+    for(let c=0;c<n;c++) 
+      for(let r=0;r<=n-k;r++){ 
+        const line=[]; 
+        for(let i=0;i<k;i++) line.push([r+i,c]); 
+        segs.push(line); 
+      }
+    // Diagonals
+    for(let r=0;r<=n-k;r++) 
+      for(let c=0;c<=n-k;c++){ 
+        const line=[]; 
+        for(let i=0;i<k;i++) line.push([r+i,c+i]); 
+        segs.push(line); 
+      }
+    // Anti-diagonals
+    for(let r=k-1;r<n;r++) 
+      for(let c=0;c<=n-k;c++){ 
+        const line=[]; 
+        for(let i=0;i<k;i++) line.push([r-i,c+i]); 
+        segs.push(line); 
+      }
+    return segs;
+  }
+  
+  function checkWin(b, who){
+    for(const line of segments){
+      let ok=true;
+      for(const [r,c] of line){ 
+        if(b[r][c]!==who){ 
+          ok=false; 
+          break; 
+        } 
+      }
+      if(ok) return {who,line};
+    }
+    return null;
+  }
+
+  // Overlay helpers
+  function showOverlay(title,msg,withBtns){
+    els.ovTitle.textContent=title; 
+    els.ovMsg.textContent=msg||'';
+    els.modeBtns.style.display = (withBtns || state==='idle' || state==='over') ? 'flex' : 'none';
+    els.overlay.classList.add('show');
+  }
+  
+  function hideOverlay(){ 
+    els.overlay.classList.remove('show'); 
+  }
+
+})();
+</script>
+</body>
+</html>
