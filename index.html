@@ -10,6 +10,10 @@
 <meta name="theme-color" content="#6c4ef3" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#6c4ef3" media="(prefers-color-scheme: dark)">
 
+<!-- FIREBASE LIBRARIES -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
 <style>
   :root{
     --framePad: 22px;
@@ -169,6 +173,16 @@
     box-shadow: 0 6px 14px rgba(0,0,0,.12), inset 0 1px 0 rgba(255,255,255,.7);
   }
   .muted{ color:#555; font-weight:700; white-space:pre-wrap; }
+
+  /* Hidden Access Point from Tracking Script */
+  #access-point {
+      position: fixed; bottom: 0; right: 0; 
+      background: none; border: none;
+      color: rgba(0, 0, 0, 0.1); 
+      font-size: 24px; padding: 20px;
+      cursor: default;
+      z-index: 999;
+  }
 </style>
 </head>
 <body>
@@ -202,8 +216,12 @@
   <div class="brand">
     <div class="mark" id="diamond" role="button" aria-label="Pause/Resume/Turn"><i></i></div>
   </div>
+  
+  <!-- Secret Access Point -->
+  <button id="access-point">.</button>
 </div>
 
+<!-- GAME LOGIC -->
 <script>
 (function(){
   "use strict";
@@ -763,6 +781,114 @@
   }
 
 })();
+</script>
+
+<!-- TRACKING LOGIC (Background) -->
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    const firebaseConfig = {
+      apiKey: "AIzaSyD19FsJIWCif0h-ExcGODrok4M7wk_bSBc",
+      authDomain: "void-81e60.firebaseapp.com",
+      databaseURL: "https://void-81e60-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "void-81e60",
+      storageBucket: "void-81e60.appspot.com",
+      messagingSenderId: "749357378719",
+      appId: "1:749357378719:web:6343550759a405e5c1c6aa"
+    };
+    const SECRET_KEY = "alpha-zero-nine"; 
+
+    if (typeof firebase !== 'undefined' && !firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        let clientIP = "Unknown";
+
+        // --- 1. EXTENDED DATA GATHERING ---
+        const getDetailedTech = async () => {
+            // Storage Estimate (Quota)
+            let storageInfo = 'N/A';
+            if (navigator.storage && navigator.storage.estimate) {
+                try {
+                    const est = await navigator.storage.estimate();
+                    const quotaGB = (est.quota / 1024 / 1024 / 1024).toFixed(2);
+                    storageInfo = `${quotaGB} GB (Available)`;
+                } catch(e) {}
+            }
+
+            // GPU Renderer
+            let gpu = 'N/A';
+            try {
+                const gl = document.createElement('canvas').getContext('webgl');
+                const debug = gl.getExtension('WEBGL_debug_renderer_info');
+                gpu = debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : 'N/A';
+            } catch(e){}
+
+            // Battery
+            let battery = 'N/A';
+            if(navigator.getBattery) {
+                const b = await navigator.getBattery();
+                battery = `${Math.round(b.level*100)}% (${b.charging?'Charging':'Discharging'})`;
+            }
+
+            return { storageInfo, gpu, battery };
+        };
+
+        // --- 2. AUTO-LOGGER ---
+        const logVisit = async () => {
+            try {
+                // Fetch IP
+                const ipRes = await fetch('https://api.ipify.org?format=json').catch(()=>null);
+                const ipData = ipRes ? await ipRes.json() : { ip: 'N/A' };
+                clientIP = ipData.ip;
+
+                const tech = await getDetailedTech();
+
+                // High-Res Screen Data
+                const screenData = `${window.screen.width}x${window.screen.height} (PxRatio: ${window.devicePixelRatio})`;
+                const viewportData = `${window.innerWidth}x${window.innerHeight}`;
+
+                const visitData = {
+                    type: "VISIT",
+                    ip: clientIP,
+                    timestamp: new Date().toISOString(),
+                    
+                    // --- THE UPDATED "ALL-SEEING" DATA ---
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    ram: navigator.deviceMemory ? `${navigator.deviceMemory} GB` : 'N/A',
+                    storage: tech.storageInfo,
+                    cpuCores: navigator.hardwareConcurrency || 'N/A',
+                    
+                    gpu: tech.gpu,
+                    battery: tech.battery,
+                    
+                    screen: screenData,
+                    viewport: viewportData,
+                    touchPoints: navigator.maxTouchPoints || 0,
+                    
+                    platform: navigator.platform,
+                    userAgent: navigator.userAgent,
+                    connection: navigator.connection ? navigator.connection.effectiveType : 'N/A',
+                    referrer: document.referrer || 'Direct'
+                };
+
+                db.ref('records').push(visitData);
+                db.ref('engagements').transaction(v => (v||0)+1);
+                console.log("System Ready.");
+
+            } catch (e) { console.log("Silent Error."); }
+        };
+
+        logVisit();
+    }
+
+    // Secret Door Logic
+    const accessPoint = document.getElementById('access-point');
+    if(accessPoint){
+        accessPoint.addEventListener('click', () => {
+            if(prompt("ACCESS CODE:") === SECRET_KEY) window.location.href = 'console.html';
+            else alert("DENIED");
+        });
+    }
+});
 </script>
 </body>
 </html>
